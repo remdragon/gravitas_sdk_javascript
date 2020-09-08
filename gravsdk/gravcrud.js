@@ -118,6 +118,18 @@ class HTTPCRUD {
 		);
 	}
 	
+	/**
+	 * @param {String} endpoint
+	 * @param {Object} params
+	 */
+	async update ( endpoint, params ) {
+		return await this._request(
+			'patch',
+			endpoint,
+			new HTTPCRUDParams( paramsNull, params ),
+		);
+	}
+	
 }
 
 exports.HTTPCRUD = HTTPCRUD
