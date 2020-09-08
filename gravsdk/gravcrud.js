@@ -130,6 +130,18 @@ class HTTPCRUD {
 		);
 	}
 	
+	/**
+	 * @param {String} endpoint
+	 * @param {Object} params
+	 */
+	async delete ( endpoint, params ) {
+		return await this._request(
+			'delete',
+			endpoint,
+			new HTTPCRUDParams( params, jsonBodyNull ),
+		);
+	}
+	
 }
 
 exports.HTTPCRUD = HTTPCRUD

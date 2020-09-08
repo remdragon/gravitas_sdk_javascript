@@ -36,7 +36,7 @@ function setupExpress() {
 	};
 	
 	app.use ( bodyParser.json() )
-	app.use ( bodyParser.urlencoded() )
+	//app.use ( bodyParser.urlencoded() )
 	
 	app.get( '/rest/orders', ( _, res ) => {
 		success ( res, Object.values ( db.orders.rows ) )
@@ -55,11 +55,20 @@ function setupExpress() {
 			failure ( res, `order id '${req.params.id}' not found` );
 			return;
 		}
-		console.log(req.body)
+		
 		let id = order.id
 		order = Object.assign( order, req.body )
 		order.id = id
 		success ( res, [order] )
+	} )
+	
+	app.delete( '/rest/orders/:id', ( req, res ) => {
+		if ( !( req.params.id in db.orders.rows ) ) {
+			failure ( res, `order id '${req.params.id}' not found` );
+			return;
+		}
+		delete db.orders.rows[ req.params.id ]
+		success ( res, [] )
 	} )
 	
 	app.get( '/rest/not-json', ( _, res ) => {
@@ -77,46 +86,62 @@ describe ( 'GRAVCRUD Tests', () => {
 		setupExpress()
 	} )
 	
-	it ( 'read test', async () => {
-		const result = await crud.read( 'orders', {} )
-		
-		assert( result.success, 'success false or not found' )
-		assert ( result.rows.length === 2, `expected 2, but for ${result.rows.length}` )
-	} )
-	
-	it ( 'create test', async () => {
-		const result = await crud.create( 'orders', {
-			'ORDER_NUM': 567,
+	describe ( 'Core CRUD Tests', () => {
+		it ( 'read test', async () => {
+			const result = await crud.read ( 'orders', {} )
+			
+			assert( result.success, 'success false or not found' )
+			assert ( result.rows.length === 2, `expected 2, but for ${result.rows.length}` )
 		} )
 		
-		assert ( result.success, 'success false or not found' )
-		assert ( result.rows, `expected 'rows', but not found` )
-		const row = result.rows[0]
-		assert ( row.id == 3, `expected row.id of '3'` )
-		assert ( row.ORDER_NUM === 567, `expected returned ORDER_NUM of '567'` )
-	} )
-	
-	it ( 'update test',  async () => {
-		const result = await crud.update( 'orders/1', {
-			'foo': 'bar',
+		it ( 'create test', async () => {
+			const result = await crud.create ( 'orders', {
+				'ORDER_NUM': 567,
+			} )
+			
+			assert ( result.success, 'success false or not found' )
+			assert ( result.rows, `expected 'rows', but not found` )
+			const row = result.rows[0]
+			assert ( row.id == 3, `expected row.id of '3'` )
+			assert ( row.ORDER_NUM === 567, `expected returned ORDER_NUM of '567'` )
 		} )
 		
-		const row = result.rows[0]
+		it ( 'update test',  async () => {
+			const result = await crud.update ( 'orders/1', {
+				'foo': 'bar',
+			} )
+			
+			const row = result.rows[0]
+			
+			assert ( row.foo === 'bar', `expected 'foo' to be 'bar'` )
+			assert ( row.ORDER_NUM === 1, `expected ORDER_NUM to be '1'` )
+		} )
 		
-		assert ( row.foo === 'bar', `expected 'foo' to be 'bar'` )
-		assert ( row.ORDER_NUM === 1, `expected ORDER_NUM to be '1'` )
+		it ( 'delete test', async() => {
+			const resultSuccess = await crud.delete ( 'orders/3' )
+			
+			assert ( resultSuccess.success == true, `expected 'success' to be true` )
+			
+			const resultFail = await crud.delete ( 'orders/3' )
+			
+			assert ( resultFail.success == false, `expected 'success' to be false` )
+		} )
 	} )
 	
-	it ( 'unexpected data test', async () => {
-		try {
-			await crud.create( 'not-json' )
-		}
-		catch ( e ) {
-			assert (
-				e instanceof gravcrud.GravJSONValueError,
-				`expected GravJSONValueError, got ${e}`
-			)
-		}
+	describe ( 'CRUD Edgecase Tests', () => {
+		
+		it ( 'unexpected data test', async () => {
+			try {
+				await crud.create( 'not-json' )
+			}
+			catch ( e ) {
+				assert (
+					e instanceof gravcrud.GravJSONValueError,
+					`expected GravJSONValueError, got ${e}`
+				)
+			}
+		} )
+		
 	} )
 	
 	after( () => {
