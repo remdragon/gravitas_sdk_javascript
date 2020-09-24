@@ -93,6 +93,7 @@ class sdkv1 {
 	/**
 	 * @param {boolean} result
 	 * @param {Object} responseData
+	 * @returns {boolean}
 	 */
 	_login_sanity_check ( result, responseData ) {
 		if ( !result )
@@ -111,7 +112,54 @@ class sdkv1 {
 				responseData['error']
 			)
 		
-		return success;
+		return success
+	}
+	
+	async login_session_check() {
+		const responseData = await this.CRUD.read ( 'login', {} );
+		if ( !this._login_sanity_check( true, responseData ) )
+			return [ false, {} ]
+		if ( !responseData.rows || responseData.rows.length == 0 )
+			return [ false, {} ]
+		else
+			return [ true, responseData['rows'] ]
+	}
+	
+	/**
+	 * @param {string} username
+	 * @param {string} password
+	 */
+	async login( username, password ) {
+		const payload = {
+			'USER': username,
+			'PASSWORD': password,
+		}
+		const responseData = await this.CRUD.create(
+			'login',
+			payload,
+		)
+		
+		if ( !this._login_sanity_check ( true, responseData ) )
+			return false
+		
+		if ( !( 'rows' in responseData ) )
+			throw new GravAuthError (
+				'No user data received',
+			)
+		
+		const rows = responseData['rows']
+		
+		if ( rows['FORCE_PWD_CHANGE'] )
+			throw new GravAuthError (
+				`Password must be changed. Please log in with a browser to https://${this.hostParts.host} to change your password`
+			)
+		if ( rows['expired_pwd'] )
+			throw new GravAuthError (
+				`Password has expired. Please log in with a browser to https://${this.hostParts.host} to change your password`
+			)
+		
+		// TODO FIXME: deal with other scenarios
+		return true
 	}
 	
 }
