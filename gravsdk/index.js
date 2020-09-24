@@ -33,7 +33,7 @@ class GravAuthError extends Error {
 		throw new GravAuthError('No user data received')
 	*/
 	constructor( responseText ) {
-		super( `Login error: \`${responsetext}\`` )
+		super( `Login error: \`${responseText}\`` )
 	}
 }
 
@@ -79,7 +79,7 @@ class sdkv1 {
 		if ( this.protocol == HttpProtocol.https ) {
 			this.CRUD = new gravcrud.HTTPCRUD(
 				this.hostParts.href,
-				this.sslVerifyEnabled
+				this.sslVerifyEnabled,
 			)
 		}
 		else if ( this.protocol === HttpProtocol.wss ) {
@@ -88,7 +88,30 @@ class sdkv1 {
 		else {
 			throw new GravError ( 'invalid protocol specified, must be `https` or `wss`' )
 		}
+	}
+	
+	/**
+	 * @param {boolean} result
+	 * @param {Object} responseData
+	 */
+	_login_sanity_check ( result, responseData ) {
+		if ( !result )
+			throw new GravAuthError (
+				'Invalid API Data received'
+			)
 		
+		var success = responseData['success']
+		if ( typeof success === 'undefined' )
+			throw new GravAuthError (
+				'api response missing `success` key'
+			)
+		// API authentication call was not successful
+		if ( !success && 'error' in responseData )
+			throw new GravAuthError (
+				responseData['error']
+			)
+		
+		return success;
 	}
 	
 }

@@ -1,4 +1,5 @@
 const assert = require ( 'assert' )
+const expect = require ( 'expect' )
 const gravcrud = require ( '../gravsdk/gravcrud' )
 const crud = new gravcrud.HTTPCRUD( 'http://127.0.0.1:8181', true )
 const express = require( 'express' )
@@ -90,7 +91,7 @@ describe ( 'GRAVCRUD Tests', () => {
 		it ( 'read test', async () => {
 			const result = await crud.read ( 'orders', {} )
 			
-			assert( result.success, 'success false or not found' )
+			expect ( result.success ).toBe ( true )
 			assert ( result.rows.length === 2, `expected 2, but for ${result.rows.length}` )
 		} )
 		
@@ -99,11 +100,11 @@ describe ( 'GRAVCRUD Tests', () => {
 				'ORDER_NUM': 567,
 			} )
 			
-			assert ( result.success, 'success false or not found' )
-			assert ( result.rows, `expected 'rows', but not found` )
+			expect ( result.success ).toBe( true )
+			expect ( result.rows ).toBeDefined()
 			const row = result.rows[0]
-			assert ( row.id == 3, `expected row.id of '3'` )
-			assert ( row.ORDER_NUM === 567, `expected returned ORDER_NUM of '567'` )
+			expect ( row.id ).toEqual( 3 )
+			expect ( row.ORDER_NUM ).toEqual ( 567 )
 		} )
 		
 		it ( 'update test',  async () => {
@@ -113,18 +114,18 @@ describe ( 'GRAVCRUD Tests', () => {
 			
 			const row = result.rows[0]
 			
-			assert ( row.foo === 'bar', `expected 'foo' to be 'bar'` )
-			assert ( row.ORDER_NUM === 1, `expected ORDER_NUM to be '1'` )
+			expect ( row.foo ).toEqual ( 'bar' )
+			expect ( row.ORDER_NUM ).toEqual ( 1 )
 		} )
 		
 		it ( 'delete test', async() => {
 			const resultSuccess = await crud.delete ( 'orders/3' )
 			
-			assert ( resultSuccess.success == true, `expected 'success' to be true` )
+			expect ( resultSuccess.success ).toEqual ( true )
 			
 			const resultFail = await crud.delete ( 'orders/3' )
 			
-			assert ( resultFail.success == false, `expected 'success' to be false` )
+			expect ( resultFail.success ).toEqual ( false )
 		} )
 	} )
 	
