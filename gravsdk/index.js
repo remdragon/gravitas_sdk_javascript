@@ -162,6 +162,14 @@ class sdkv1 {
 		return true
 	}
 	
+	async logout() {
+		const result = await this.CRUD.delete(
+			'login',
+			{}
+		)
+		return this._login_sanity_check( true, result )
+	}
+	
 }
 
 exports.sdkv1 = sdkv1

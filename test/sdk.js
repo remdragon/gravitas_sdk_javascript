@@ -42,6 +42,25 @@ describe ( 'SDK Tests', () => {
 			} );
 		} );
 	} );
+	
+	describe ( 'logout tests', async () => {
+		const URL = 'https://127.0.0.1:5000'
+		const sdk = new sdkv1 ( URL, false )
+		
+		it ( 'logout', async () => {
+			const loginResult = await sdk.login ( 'setup', 'deleteme' )
+			expect ( loginResult ).toBe ( true )
+			const logoutResult = await sdk.logout();
+			expect ( logoutResult ).toBe ( true );
+		} )
+		
+		it ( 'login failure', () => {
+			expect ( async () => {
+				const result = await sdk.logout()
+				console.log( result )
+			} )
+		} )
+	} )
 
 	describe( 'edge cases', () => {
 		
