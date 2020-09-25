@@ -176,4 +176,94 @@ class sdkv1 {
 	
 }
 
+class skdv1client {
+	/**
+	 * @param {sdkv1} sdk
+	 * @param {int|string} clientId
+	 */
+	constructor( sdk, clientId ) {
+		this.sdk = sdk
+		this.clientId = clientId
+	}
+	
+	/**
+	 * @param {int} limit
+	 */
+	listing ( limit=9999 ) {
+		const uri = '/rest/OE_CLIEN'
+		const params = {
+			limit
+		}
+		
+		if ( this.clientId != 0 )
+			params.filter = `CLIENT_ID=${this.clientId}`
+		else
+			params.fields = 'CLIENT_ID,NAME'
+		return this.sdk.CRUD.read ( uri, params )
+	}
+	
+	orders() {
+		return new sdkv1endpoint(
+			this.sdk,
+			`/rest/client/${this.clientId}/ORDERS`
+		)
+	}
+	
+	contacts() {
+		return new sdkv1endpoint(
+			this.sdk,
+			`/rest/client/${this.clientId}/PT_CONTC`
+		)
+	}
+}
+
+// This is a way to have typed optional args in JS.
+/**
+ * @interface
+ */
+function SearchArgsInterface() {
+	/**
+	 * @type {Array<string>}
+	 */
+	this.fields = null
+	this.limit = 100
+	this.offset = 0
+	/**
+	 * @type {Object}
+	 */
+	this.filter = null
+}
+
+class sdkv1endpoint {
+	/**
+	 * @param {sdkv1} sdk
+	 * @param {string} endpoint
+	 */
+	constructor( sdk, endpoint ) {
+		this.sdk = sdk
+		this.endpoint = endpoint
+	}
+	
+	/**
+	 * @param {SearchArgsInterface} args
+	 */
+	search ( args ) {
+		const params = {}
+		if ( args.limit )
+			params.limit = args.limit
+		if ( args.offset )
+			params.offset = args.offset
+		if ( args.fields )
+			params.fields = args.fields.join ( ',' )
+		if ( args.filter )
+			params.filter = Object.entries( args.filter )
+			.map( ([k, v]) => { return `${k}=${v}` } ).join( ',' )
+		
+		const opResult = this.sdk.CRUD.read(
+			this.endpoint,
+			params
+		)
+	}
+}
+
 exports.sdkv1 = sdkv1
