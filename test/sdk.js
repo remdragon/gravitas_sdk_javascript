@@ -1,4 +1,3 @@
-const assert = require ( 'assert' )
 const expect = require ( 'expect' )
 
 const sdkv1 = require ( '../gravsdk' ).sdkv1

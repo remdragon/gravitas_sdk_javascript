@@ -115,6 +115,7 @@ class sdkv1 {
 		return success
 	}
 	
+	// TODO FIXME: Not used...
 	async login_session_check() {
 		const responseData = await this.CRUD.read ( 'login', {} );
 		if ( !this._login_sanity_check( true, responseData ) )
@@ -139,8 +140,10 @@ class sdkv1 {
 			payload,
 		)
 		
-		if ( !this._login_sanity_check ( true, responseData ) )
-			return false
+		// TODO FIXME: This doesn't seem needed.
+		// We're checking if the login was successful down below
+		// if ( !this._login_sanity_check ( true, responseData ) )
+		// 	return false
 		
 		if ( !( 'rows' in responseData ) )
 			throw new GravAuthError (
