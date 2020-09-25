@@ -37,6 +37,7 @@ class GravAuthError extends Error {
 	}
 }
 
+// TODO FIXME: Not used...
 class GravGeneralError extends Error {
 	/**
 	# Exception Class: GravGeneralError
