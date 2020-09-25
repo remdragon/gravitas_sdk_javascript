@@ -54,7 +54,7 @@ class GravGeneralError extends Error {
 
 	*/
 	constructor( responseText ) {
-		super( `General error: \`${responsetext}\`` )
+		super( `General error: \`${responseText}\`` )
 	}
 }
 

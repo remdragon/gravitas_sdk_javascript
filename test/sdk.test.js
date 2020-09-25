@@ -69,7 +69,7 @@ describe ( 'SDK Tests', () => {
 				const sdk = new sdkv1 ( 'wss://localhost/rest' )
 			}
 			catch ( e ) {
-				assert ( e.message === 'API error: `Not Implemented`' )
+				expect ( e.message ).toEqual ( 'API error: `Not Implemented`' )
 			}
 			
 		} );
@@ -80,9 +80,10 @@ describe ( 'SDK Tests', () => {
 				const sdk = new sdkv1 ( 'ssdfg://localhost/rest' )
 			}
 			catch ( e ) {
-				assert ( e.message === 'API error: `invalid protocol specified, must be `https` or `wss``' )
+				expect ( e.message ).toEqual (
+					'API error: `invalid protocol specified, must be `https` or `wss``'
+				)
 			}
-			
 			
 		} );
 	} );
