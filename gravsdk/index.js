@@ -157,7 +157,7 @@ class sdkv1 {
 			throw new GravAuthError (
 				`Password must be changed. Please log in with a browser to https://${this.hostParts.host} to change your password`
 			)
-		if ( rows['expired_pwd'] )
+		if ( rows['EXPIRED_PWD'] )
 			throw new GravAuthError (
 				`Password has expired. Please log in with a browser to https://${this.hostParts.host} to change your password`
 			)
