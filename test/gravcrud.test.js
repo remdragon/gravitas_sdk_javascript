@@ -1,4 +1,3 @@
-const assert = require ( 'assert' )
 const expect = require ( 'expect' )
 const gravcrud = require ( '../gravsdk/gravcrud' )
 const express = require( 'express' )
@@ -93,7 +92,7 @@ describe ( 'GRAVCRUD Tests', () => {
 			const result = await crud.read ( 'orders', {} )
 			
 			expect ( result.success ).toBe ( true )
-			assert ( result.rows.length === 2, `expected 2, but for ${result.rows.length}` )
+			expect ( result.rows.length ).toEqual ( 2 )
 		} )
 		
 		it ( 'create test', async () => {
@@ -137,10 +136,7 @@ describe ( 'GRAVCRUD Tests', () => {
 				await crud.create( 'not-json' )
 			}
 			catch ( e ) {
-				assert (
-					e instanceof gravcrud.GravJSONValueError,
-					`expected GravJSONValueError, got ${e}`
-				)
+				expect ( e ).toBeInstanceOf ( gravcrud.GravJSONValueError )
 			}
 		} )
 		
