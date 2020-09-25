@@ -86,6 +86,7 @@ class HTTPCRUD {
 				responseType: 'json', // default, but wanted to make it clear
 				timeout: 5000,
 				httpsAgent: this._httpsAgent,
+				validateStatus: null,
 			});
 			return result.data;
 		}
