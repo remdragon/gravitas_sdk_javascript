@@ -1,7 +1,6 @@
 const assert = require ( 'assert' )
 const expect = require ( 'expect' )
 const gravcrud = require ( '../gravsdk/gravcrud' )
-const crud = new gravcrud.HTTPCRUD( 'http://127.0.0.1:8181', true )
 const express = require( 'express' )
 const bodyParser = require('body-parser')
 
@@ -82,6 +81,8 @@ function setupExpress() {
 }
 
 describe ( 'GRAVCRUD Tests', () => {
+	
+	const crud = new gravcrud.HTTPCRUD ( 'http://127.0.0.1:8181', true )
 	
 	before ( () => {
 		setupExpress()
