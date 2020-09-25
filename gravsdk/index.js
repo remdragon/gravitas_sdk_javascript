@@ -176,6 +176,7 @@ class sdkv1 {
 	
 }
 
+// TODO FIXME: needs tests
 class skdv1client {
 	/**
 	 * @param {sdkv1} sdk
@@ -234,6 +235,7 @@ function SearchArgsInterface() {
 	this.filter = null
 }
 
+// TODO FIXME: needs tests
 class sdkv1endpoint {
 	/**
 	 * @param {sdkv1} sdk
