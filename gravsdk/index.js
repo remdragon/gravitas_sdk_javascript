@@ -76,10 +76,9 @@ class sdkv1 {
 	
 		// TODO FIXME: Find out why a colon is being left over...
 		this.protocol = this.hostParts.protocol.replace ( ':', '' )
-		
 		if ( this.protocol == HttpProtocol.https ) {
 			this.CRUD = new gravcrud.HTTPCRUD(
-				this.hostParts.href,
+				this.protocol + '://' + this.hostParts.host,
 				this.sslVerifyEnabled,
 			)
 		}
@@ -130,7 +129,7 @@ class sdkv1 {
 	 * @param {string} username
 	 * @param {string} password
 	 */
-	async login( username, password ) {
+	async login ( username, password ) {
 		const payload = {
 			'USER': username,
 			'PASSWORD': password,
