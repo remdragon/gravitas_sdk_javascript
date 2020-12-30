@@ -1,17 +1,7 @@
 'use strict';
 
-const url = require ( 'url' )
+import { HTTPCRUD, WSSCRUD } from './gravcrud.js'
 
-const gravcrud = require ( './gravcrud' )
-
-/**
-	# Exception Class: `GravError`
-	Exception raised for general SDK errors
-
-	|Attribute|Description|
-	|-|-|
-	|`responsetext`|Descriptive text of the error|
-*/
 class GravError extends Error {
 	constructor ( responseText ) {
 		super ( `API error: \`${responseText}\`` )
@@ -19,75 +9,36 @@ class GravError extends Error {
 }
 
 class GravAuthError extends Error {
-	/**
-	# Exception Class: `GravAuthError`
-	
-	The `GravAuthError` exception class is raised when invalid credentials are used or response received from the API is missing data
-	
-	|Attribute|Type|Description|
-	|-|-|-|
-	|`responsetext`|str|Descriptive text of the failed authentication attempt|
-	
-	## Usage:
-	
-		throw new GravAuthError('No user data received')
-	*/
 	constructor( responseText ) {
 		super( `Login error: \`${responseText}\`` )
 	}
 }
 
-// TODO FIXME: Not used...
-class GravGeneralError extends Error {
-	/**
-	# Exception Class: GravGeneralError
+export default class sdkv1 {
+	constructor( host, sslVerifyEnabled ) {
 
-	The `GravGeneralError` exception class is raised when general non-specific errors occur, such as passing an incorrectly typed variable or other user mistakes occur.
+		this.url = new URL ( host )
 
-	|Attribute|Type|Description|
-	|-|-|-|
-	|`responsetext`|str|Descriptive text of the error encountered|
-	
-	## Usage:
-	
-		throw new GravGeneralError('Invalid method specified: sdk.PUPPIES')
-
-	*/
-	constructor( responseText ) {
-		super( `General error: \`${responseText}\`` )
-	}
-}
-
-const HttpProtocol = {
-	https: 'https',
-	wss: 'wss'
-}
-
-class sdkv1 {
-	// TODO: Port in progress...
-	
-	constructor( host, sslVerifyEnabled, ) {
-		
 		if ( typeof sslVerifyEnabled === 'undefined' )
 			sslVerifyEnabled = true
 		
 		this.sslVerifyEnabled = sslVerifyEnabled
-		this.hostParts = url.parse ( host )
-	
-		// TODO FIXME: Find out why a colon is being left over...
-		this.protocol = this.hostParts.protocol.replace ( ':', '' )
-		if ( this.protocol == HttpProtocol.https ) {
-			this.CRUD = new gravcrud.HTTPCRUD(
-				this.protocol + '://' + this.hostParts.host,
-				this.sslVerifyEnabled,
-			)
+		this.protocol = this.url.protocol
+
+		if ( this.protocol == 'https:' ) {
+			this.CRUD = new HTTPCRUD ( host, this.sslVerifyEnabled, )
 		}
-		else if ( this.protocol === HttpProtocol.wss ) {
-			throw new GravError ( 'Not Implemented' );
+		else if ( this.protocol === 'wss:' ) {
+			this.CRUD = new WSSCRUD ( host )
 		}
 		else {
 			throw new GravError ( 'invalid protocol specified, must be `https` or `wss`' )
 		}
+	}
+
+	async connect()
+	{
+		return await this.CRUD.connect()
 	}
 	
 	/**
@@ -130,36 +81,22 @@ class sdkv1 {
 	 * @param {string} password
 	 */
 	async login ( username, password ) {
+
 		const payload = {
 			'USER': username,
 			'PASSWORD': password,
 		}
+
 		const responseData = await this.CRUD.create(
 			'login',
 			payload,
 		)
-		
-		if ( !this._login_sanity_check ( true, responseData ) )
-			return false
-		
-		if ( !( 'rows' in responseData ) )
-			throw new GravAuthError (
-				'No user data received',
-			)
-		
-		const rows = responseData['rows']
-		
-		if ( rows['FORCE_PWD_CHANGE'] )
-			throw new GravAuthError (
-				`Password must be changed. Please log in with a browser to https://${this.hostParts.host} to change your password`
-			)
-		if ( rows['EXPIRED_PWD'] )
-			throw new GravAuthError (
-				`Password has expired. Please log in with a browser to https://${this.hostParts.host} to change your password`
-			)
+
+        if ( !responseData )
+            throw new GravAuthError ( responseData['error'] )
 		
 		// TODO FIXME: deal with other scenarios
-		return true
+		return responseData
 	}
 	
 	async logout() {
@@ -170,6 +107,29 @@ class sdkv1 {
 		return this._login_sanity_check( true, result )
 	}
 	
+	async clients( limit = 100 ) {
+		return await this.CRUD.read (
+			'clients',
+			{ limit: limit }
+		)
+	}
+
+	client ( id )
+	{
+		return new skdv1client ( this, id )	
+	}
+
+	/**
+	 * @param {int} limit
+	 */
+	oe_clien ( limit = 100, fields = 'CLIENT_ID,NAME' ) {
+		const uri = '/rest/OE_CLIEN'
+		const params = {
+			limit: limit,
+			fields: fields
+		}
+		return this.sdk.CRUD.read ( uri, params )
+	}
 }
 
 // TODO FIXME: needs tests
@@ -181,35 +141,20 @@ class skdv1client {
 	constructor( sdk, clientId ) {
 		this.sdk = sdk
 		this.clientId = clientId
+		this.path = `/acct/${clientId}/`
 	}
-	
-	/**
-	 * @param {int} limit
-	 */
-	listing ( limit=9999 ) {
-		const uri = '/rest/OE_CLIEN'
-		const params = {
-			limit
-		}
 		
-		if ( this.clientId != 0 )
-			params.filter = `CLIENT_ID=${this.clientId}`
-		else
-			params.fields = 'CLIENT_ID,NAME'
-		return this.sdk.CRUD.read ( uri, params )
-	}
-	
 	orders() {
 		return new sdkv1endpoint(
 			this.sdk,
-			`/rest/client/${this.clientId}/ORDERS`
+			this.path + 'ORDERS'
 		)
 	}
 	
 	contacts() {
 		return new sdkv1endpoint(
 			this.sdk,
-			`/rest/client/${this.clientId}/PT_CONTC`
+			this.path + 'PT_CONTC'
 		)
 	}
 }
@@ -245,7 +190,7 @@ class sdkv1endpoint {
 	/**
 	 * @param {SearchArgsInterface} args
 	 */
-	search ( args ) {
+	async search ( args ) {
 		const params = {}
 		if ( args.limit )
 			params.limit = args.limit
@@ -257,11 +202,9 @@ class sdkv1endpoint {
 			params.filter = Object.entries( args.filter )
 			.map( ([k, v]) => { return `${k}=${v}` } ).join( ',' )
 		
-		const opResult = this.sdk.CRUD.read(
+		return await this.sdk.CRUD.read (
 			this.endpoint,
 			params
 		)
 	}
 }
-
-exports.sdkv1 = sdkv1
