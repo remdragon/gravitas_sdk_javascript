@@ -141,7 +141,7 @@ class skdv1client {
 	constructor( sdk, clientId ) {
 		this.sdk = sdk
 		this.clientId = clientId
-		this.path = `/acct/${clientId}/`
+		this.path = `acct/${clientId}/`
 	}
 		
 	orders() {

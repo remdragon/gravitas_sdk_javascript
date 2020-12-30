@@ -67,30 +67,20 @@ export class HTTPCRUD {
 					break
             }
             
-            let result
+			let result
+									
+			await fetch ( uri, params ) 
+				.then( response => response.json() )
+				.then ( data => {
+					result = data
+				} )
+				.catch ( e => {
+					result = {
+						success: false,
+						error: e
+					}
+				} )
 
-            await fetch ( uri, params ) 
-                .then( response => {
-                    if ( response.ok ) {
-                        return response.json()
-                    } 
-                    else 
-                    {
-                        if ( response.status == 404 ) {
-                            return { success: false, error: `Invalid URL: ${uri}` }
-                        } else {
-                            return { success: false, error: response.statusText }
-                        }
-                    }
-                })
-                .then ( data => {
-                    result = data
-                } )
-                .catch ( e => {
-			        throw new HTTPJSONValueError( `fetch.catch: ${e}` );
-                } )
-
-            console.log( `result = data = ${JSON.stringify(result)}`)
 			return result
 		}
 		catch ( e ) {
@@ -144,6 +134,12 @@ export class HTTPCRUD {
 			endpoint,
 			params,
 		);
+	}
+
+	async connect ()
+	{
+		// This function does nothing...
+		// Just to make the HTTPCRUD class similar to WSSCRUD
 	}
 }
 
