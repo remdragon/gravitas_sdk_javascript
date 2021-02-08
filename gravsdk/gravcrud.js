@@ -1,3 +1,20 @@
+// by: carl
+// just a wrapper for `fetch` API that throws an error base on response
+
+const _fetch_ = async ( url, params ) => {
+	try {
+		const response = await fetch ( url, params )
+		try { var body = await response.clone().json() }
+		catch { var body = await response.text() }
+		if ( !response.ok ) {
+			const { status, statusText } = response
+			throw new Error (
+				`${statusText} (${status})${body ? ': ' + body.error || JSON.stringify(body) : ''}`
+			)
+		}
+		else return body
+	} catch ( err ) { throw err }
+}
 const jsonBodyNull = null
 const paramsNull = null
 
@@ -39,53 +56,32 @@ export class HTTPCRUD {
 	 * @param {HTTPCRUDParams} paramArgs
 	 */
 	async _request( method, endpoint, paramArgs ) {
-		const uri = `${this.host}/rest/${endpoint}/`
 		/* istanbul ignore next */
 		if ( typeof paramArgs === 'undefined' || paramArgs === null )
-			paramArgs = HTTPCRUDParams()
-		
-		try {
-			var params = {}
+			paramArgs =  new HTTPCRUDParams()
 
-			switch (method.toUpperCase())
-			{
-				case 'GET':
-					params = {
-						method: method, 
-						headers: { 'Content-Type': 'application/json' },
-					}
-					break
+		var params = {}
+		switch ( method.toUpperCase() ) {
+			case 'GET':
+				params = {
+					method: method, 
+					headers: { 'Content-Type': 'application/json' },
+				}
+				break
 
-				case 'POST':
-				case 'PATCH':
-				case 'DELETE':
-					params = {
-						method: method, 
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify(paramArgs),
-					}
-					break
-            }
-            
-			let result
-									
-			await fetch ( uri, params ) 
-				.then( response => response.json() )
-				.then ( data => {
-					result = data
-				} )
-				.catch ( e => {
-					result = {
-						success: false,
-						error: e
-					}
-				} )
-
-			return result
+			case 'POST':
+			case 'PATCH':
+			case 'DELETE':
+				params = {
+					method: method, 
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(paramArgs),
+				}
+				break
 		}
-		catch ( e ) {
-			throw new HTTPJSONValueError( e.message );
-		}
+
+		try { return await _fetch_ ( `${this.host}/rest/${endpoint}`, params ) }
+		catch ( e ) { throw new HTTPJSONValueError( e.message ) }
     }
 	
 	/**
@@ -148,7 +144,8 @@ export class WSSCRUD
 	constructor ( url )
 	{
 		this.url = url
-		this.callbacks = {}
+		this.eventcallbacks = {}
+		this.replycallbacks = {}
 	}
 
 	generateId = () => {
@@ -173,31 +170,60 @@ export class WSSCRUD
 			this.wss.onmessage = ( event ) => {
 				let data = JSON.parse ( event.data )
 
-				let id = data.id // TODO: not all packets will have an id
-				let callback = this.callbacks[id] // TODO: need to remove from dictionary
+				 // TODO: not all packets will have an id
+				if( data.id ) {
+					let id = data.id
+					let replycallback = this.replycallbacks[id] // TODO: need to remove from dictionary
+					
+					if ( data.success )
+					{
+						// console.log ( `callback.resolve ( data ) = ${JSON.stringify(data)}` )
+						replycallback.resolve ( data )
+					}
+					else
+					{
+						// console.log ( `callback.reject ( data ) = ${JSON.stringify(data)}` )
+						let result = {}
+						if ( data.status === 400)
+						{
+							result = {
+								id: data.id,
+								error: data.error,
+								status: data.status
+							}
+						}
+						replycallback.reject ( result )
+					}
+				} else {
 
-				if ( data.success )
-				{
-                    console.log ( `callback.resolve ( data ) = ${JSON.stringify(data)}` )
-					callback.resolve ( data )
-				}
-				else
-				{
-                    console.log ( `callback.reject ( data ) = ${JSON.stringify(data)}` )
-
-                    let result = {}
-                    if ( data.status === 400)
-                    {
-                        result = {
-                            id: data.id,
-                            error: "Bad request",
-                            status: data.status
-                        }   
-                    }
-					callback.reject ( result )
+					try {
+						this.eventcallbacks[data.type][data.command]( data.rows )
+					} catch ( e ) {
+						console.log("WS Event Call Back", e)
+					}
+					
 				}
 			}
 		} )
+	}
+
+	AddEventCallback(type, functions) 
+	{
+		if( !this.eventcallbacks[type] ) {
+			this.eventcallbacks[type] = functions
+		} else {
+			if( typeof(functions) == 'object')
+				this.eventcallbacks[type] = this.eventcallbacks[type].concat(functions)
+			else
+				this.eventcallbacks[type].append(functions)
+		}
+		
+		return this.eventcallbacks[type]
+	}
+
+	RemoveEventCallback(type)
+	{
+		delete this.eventcallbacks[type]
 	}
 
 	/**
@@ -211,9 +237,9 @@ export class WSSCRUD
 		return new Promise ( ( resolve, reject ) => {
 
 			if ( typeof paramArgs === 'undefined' || paramArgs === null )
-				paramArgs = HTTPCRUDParams()
+				paramArgs =  new HTTPCRUDParams()
 
-            let request = {}
+			let request = {}
 
             switch (method.toUpperCase())
 			{
@@ -236,9 +262,9 @@ export class WSSCRUD
                     }
 					break
 			}
-			this.callbacks[request.id] = {
+			this.replycallbacks[request.id] = {
 				resolve: resolve,
-				reject: reject
+				reject: resolve
 			}
 			this.wss.send ( JSON.stringify( request ) + '\n' )
 		} )
@@ -252,7 +278,7 @@ export class WSSCRUD
 		return await this._request(
 			'post',
 			endpoint,
-			params,
+			params
 		);
 	}
 
