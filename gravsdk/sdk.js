@@ -1,4 +1,4 @@
-'use strict';
+'use strict'
 
 import { HTTPCRUD, WSSCRUD } from './gravcrud.js'
 
@@ -14,17 +14,17 @@ class GravAuthError extends Error {
 	}
 }
 
-export default class sdkv1 {
+export class sdkv1 {
 	constructor( host, sslVerifyEnabled ) {
-
+		
 		this.url = new URL ( host )
-
+		
 		if ( typeof sslVerifyEnabled === 'undefined' )
 			sslVerifyEnabled = true
 		
 		this.sslVerifyEnabled = sslVerifyEnabled
 		this.protocol = this.url.protocol
-
+		
 		if ( this.protocol == 'https:' ) {
 			this.CRUD = new HTTPCRUD ( host, this.sslVerifyEnabled, )
 		}
@@ -35,7 +35,7 @@ export default class sdkv1 {
 			throw new GravError ( 'invalid protocol specified, must be `https` or `wss`' )
 		}
 	}
-
+	
 	async connect()
 	{
 		return await this.CRUD.connect()
@@ -81,55 +81,72 @@ export default class sdkv1 {
 	 * @param {string} password
 	 */
 	async login ( username, password, type = null ) {
-
 		const payload = {
-			'USER': username,
-			'PASSWORD': password
+			USER: username,
+			PASSWORD: password
 		}
+		
+		if ( type )
+			payload.TYPE = type
 
-		if( type )
-			payload['TYPE'] = type
-
-		const responseData = await this.CRUD.create(
+		const responseData = await this.CRUD.create (
 			'login/',
+			null,
 			payload,
 		)
 		
-        if ( !responseData )
-            throw new GravAuthError ( responseData['error'] )
+		if ( !responseData )
+			throw new GravAuthError ( responseData['error'] )
 		
 		// TODO FIXME: deal with other scenarios
 		return responseData
 	}
 	
 	async logout() {
-		const result = await this.CRUD.delete(
+		const result = await this.CRUD.delete (
 			'login/',
 			{}
 		)
 		return this._login_sanity_check( true, result )
 	}
 	
-	async clients( limit = 100 ) {
-		return await this.CRUD.read (
-			'clients',
-			{ limit: limit }
-		)
+	client ( id ) {
+		return new sdkv1client ( this, id )
 	}
-
-	client ( id )
-	{
-		return new skdv1client ( this, id )	
+	
+	/**
+	 * @param {int} limit
+	 */
+	oe_clien = ( limit = 100, fields = null, args = {} ) => {
+		const uri = 'OE_CLIEN'
+		const params = {
+			limit: limit,
+			fields: 'CLIENT_ID,NAME' + (fields? ","+fields:''),
+			...args
+		}
+		return this.CRUD.read ( uri, params )
 	}
-
-	clien() { 
-		return new sdkv1endpoint( this, 'OE_CLIEN' )
+	
+	categories() {
+		return new sdkv1endpoint( this, 'categories/' )
+	}
+	
+	clients() {
+		return new sdkv1endpoint( this, 'clients/' )
+	}
+	
+	contact_types() {
+		return new sdkv1endpoint( this, 'contact-types' )
+	}
+	
+	employees() {
+		return new sdkv1endpoint( this, 'employees/')
 	}
 
 	did() {
 		return new sdkv1endpoint( this, 'OE_DID' )
 	}
-
+	
 	zip() {
 		return new sdkv1endpoint( this, 'OE_ZIP' )
 	}
@@ -138,8 +155,12 @@ export default class sdkv1 {
 		return new sdkv1endpoint( this, 'PRIORITY' )
 	}
 
+	task_hist() {
+		return new sdkv1endpoint( this, 'TASK_HIST' )
+	}
+
 	holiday() {
-		return new sdkv1endpoint( this,  'PTHOLDAY' )
+		return new sdkv1endpoint( this, 'PTHOLDAY' )
 	}
 
 	acd() { 
@@ -149,25 +170,29 @@ export default class sdkv1 {
 	icall() {
 		return new sdkv1endpoint( this, 'PT_ICALL' )
 	}
-
+	
 	park() {
 		return new sdkv1endpoint( this, 'PT_PARK' )
 	}
 
 	queue() { 
-		return new sdkv1endpoint( this, 'PT_QUEUE' )
+		return new sdkv1endpoint( this, 'PT_QUEUE/' )
 	}
 
 	sched() {
 		return new sdkv1endpoint( this, 'PT_SCHED' )
+	}
+	
+	skill() {
+		return new sdkv1endpoint( this, 'GV_SKILLS')
 	}
 
 	status() {
 		return new sdkv1endpoint( this, 'PTSTATUS' )
 	}
 
-	lookup() {
-		return new sdkv1endpoint( this, 'PTLOOKUP' )
+	keywords() {
+		return new sdkv1endpoint( this, 'PT_LOOKUP' )
 	}
 
 	remind() {
@@ -178,122 +203,21 @@ export default class sdkv1 {
 		return new sdkv1endpoint( this, 'PT_TACTION' )
 	}
 
-	_type() {
+	pt_main() {
+		return new sdkv1endpoint( this, 'PT_MAIN/' )
+	}
+
+	pt_type() {
 		return new sdkv1endpoint( this, 'PT_TYPE' )
 	}
 
 	prcolors() {
 		return new sdkv1endpoint( this, 'PRCOLORS' )
 	}
-	
-	/**
-	 * Dynamic Staff Endpoint
-	 * @param {str} dir, directory endpoint
-	 * @param {array} adData, Collection of data to insert in body
-	 */
-	async staff_ep (dir, adData = {})
-	{	
-		const args = adData
-		
-		const responseData = await this.CRUD.create(
-			`staff/${dir}`,
-			args
-		)
-
-        if ( !responseData )
-            throw new GravAuthError ( responseData['error'] )
-		
-		// TODO FIXME: deal with other scenarios
-		return responseData
-	}
-
-	/**
-	 * Dynamic Chat Endpoint
-	 * @param {str} dir, directory endpoint
-	 * @param {array} adData, Collection of data to insert in body
-	 */
-	async chat_ep (dir, adData = {}) 
-	{
-		const args = adData
-		
-		const responseData = await this.CRUD.create(
-			`webchat/${dir}`,
-			args
-		)
-
-        if ( !responseData )
-            throw new GravAuthError ( responseData['error'] )
-		
-		// TODO FIXME: deal with other scenarios
-		return responseData
-	}
-
-	/**
-	 * Dynamic acct Endpoint
-	 * @param {str} dir, directory endpoint
-	 * @param {array} adData, Collection of data to insert in body
-	 */
-	async acct_ep (dir, adData = {}) 
-	{
-		const args = adData
-		
-		const responseData = await this.CRUD.read(
-			`acct/${dir}`,
-			args
-		)
-
-        if ( !responseData )
-            throw new GravAuthError ( responseData['error'] )
-		
-		// TODO FIXME: deal with other scenarios
-		return responseData
-	}
-
-	/**
-	 * Dynamic priority Endpoint
-	 * @param {str} dir, directory endpoint
-	 * @param {array} adData, Collection of data to insert in body
-	 */
-	async priority_ep (dir = '', adData = {}) 
-	{
-		const args = adData
-		
-		const responseData = await this.CRUD.read(
-			'priority' + (dir != ''?`/${dir}`:''),
-			args
-		)
-
-        if ( !responseData )
-            throw new GravAuthError ( responseData['error'] )
-		
-		// TODO FIXME: deal with other scenarios
-		return responseData
-	}
-
-	/**
-	 * Dynamic rest Endpoint
-	 * @param {str} dir, directory endpoint
-	 * @param {array} adData, Collection of data to insert in body
-	 */
-	async rest_ep (dir = '', adData = {}) 
-	{
-		const args = adData
-		
-		const responseData = await this.CRUD.read(
-			dir,
-			args
-		)
-
-        if ( !responseData )
-            throw new GravAuthError ( responseData['error'] )
-		
-		// TODO FIXME: deal with other scenarios
-		return responseData
-	}
 }
 
 // TODO FIXME: needs tests
-class skdv1client {
+class sdkv1client {
 	/**
 	 * @param {sdkv1} sdk
 	 * @param {int|string} clientId
@@ -303,116 +227,133 @@ class skdv1client {
 		this.id = id
 		this.path = `acct/${id}/`
 	}
-
-	data()
-	{
-		return this.sdk.CRUD.read (
-			`clients/${this.id}`,
-			{}
-		)
-	}
-
-	keywords() {
-		return new sdkv1endpoint( this.sdk, this.path + 'KEYWORDS' )
-	}
-
+	
 	abend() {
-		return new sdkv1endpoint( this.sdk, this.path + 'OE_ABEND' )
+		return new sdkv1endpoint( this.sdk, this.path + 'OE_ABEND/' )
 	}
-
+	
 	form() {
-		return new sdkv1endpoint( this.sdk, this.path + 'OE_FORM' )
+		return new sdkv1endpoint( this.sdk, this.path + 'OE_FORM/' )
 	}
-
+	
 	goto() {
-		return new sdkv1endpoint( this.sdk, this.path + 'OE_GOTO' )
+		return new sdkv1endpoint( this.sdk, this.path + 'OE_GOTO/' )
+	}
+	
+	help() {
+		return new sdkv1endpoint( this.sdk, this.path + 'OE_HELP/' )
+	}
+	
+	orders() {
+		return new ordersendpoint( this.sdk, this.path + 'ORDERS/' )
+	}
+	
+	oncall() {
+		return new sdkv1endpoint( this.sdk, this.path + 'PTONCALL/' )
+	}
+	
+	getoncall() {
+		return new sdkv1endpoint( this.sdk, this.path + 'GETONCALL/' )
 	}
 
-	help() {
-		return new sdkv1endpoint( this.sdk, this.path + 'OE_HELP' )
+	getfield() {
+		return new sdkv1endpoint( this.sdk, this.path + 'GETDBFIELD/' )
+	}
+	
+	oncall_table ( tablename ) {
+		return new sdkv1endpoint( this.sdk, this.path + `${tablename}/` )
+	}
+	
+	picklist() {
+		return new sdkv1endpoint( this.sdk, this.path + 'OE_PKLST/' )
+	}
+	
+	skiplist() {
+		return new sdkv1endpoint( this.sdk, this.path + 'OE_SKIP/' )
+	}
+	
+	pl ( tbl ) {
+		return new sdkv1endpoint ( this.sdk, this.path + `PL/${tbl}/`)
+	}
+
+	sl ( tbl ) {
+		return new sdkv1endpoint ( this.sdk, this.path + `SL/${tbl}/`)
 	}
 		
-	orders() {
-		return new sdkv1endpoint( this.sdk, this.path + 'ORDERS' )
-	}
-
-	oncall ( item ) {
-		return new sdkv1endpoint( this.sdk, this.path + 'PTONCALL' )
-	}
-
-	oc ( tbl )
-	{
-		return new sdkv1endpoint( this.sdk, this.path + tbl )
-	}
-
-	picklist()
-	{
-		return new sdkv1endpoint( this.sdk, this.path + 'OE_PKLST' )
-	}
-
-	pl ( tbl )
-	{
-		return new sdkv1endpoint ( this.sdk, this.path + `PL/${tbl}`)
-	}
-
 	autoA() {
-		return new sdkv1endpoint( this.sdk, this.path + 'PT_AUTOA' )
+		return new sdkv1endpoint( this.sdk, this.path + 'PT_AUTOA/' )
 	}
-
+	
 	autoB() { 
-		return new sdkv1endpoint( this.sdk, this.path + 'PT_AUTOB' )
+		return new sdkv1endpoint( this.sdk, this.path + 'PT_AUTOB/' )
 	}
 	
 	contacts() {
-		return new sdkv1endpoint( this.sdk, this.path + 'PT_CONTC' )
+		return new sdkv1endpoint( this.sdk, this.path + 'PT_CONTC/' )
 	}
-
+	
 	dcl() {
-		return new sdkv1endpoint( this.sdk, this.path + 'PT_DCL' )
+		return new sdkv1endpoint( this.sdk, this.path + 'PT_DCL/' )
 	}
-
+	
 	hist() {
-		return new sdkv1endpoint( this.sdk, this.path + 'PT_HIST' )
+		return new sdkv1endpoint( this.sdk, this.path + 'PT_HIST/' )
 	}
-
-	locate() {
-		return new sdkv1endpoint( this.sdk, this.path + 'PT_LOCAT' )
+	
+	pt_locate() {
+		return new sdkv1endpoint( this.sdk, this.path + 'PT_LOCAT/' )
 	}
-
+	
+	keywords() {
+		return new sdkv1endpoint( this.sdk, this.path + 'PT_LOOKUP/')
+	}
+	
 	mdtpl() {
-		return new sdkv1endpoint( this.sdk, this.path + 'PT_MDTPL' )
+		return new sdkv1endpoint( this.sdk, this.path + 'PT_MDTPL/' )
 	}
-
+	
 	proc() {
-		return new sdkv1endpoint( this.sdk, this.path + 'PT_PROC' )
+		return new sdkv1endpoint( this.sdk, this.path + 'PT_PROC/' )
 	}
-
-	aphrase() {
-		return new sdkv1endpoint( this.sdk, this.path + 'PT_APHRASE' )
+	
+	answer_phrase() {
+		return new sdkv1endpoint( this.sdk, this.path + 'PT_APHRASE/' )
 	}
-
+	
 	procdet() {
-		return new sdkv1endpoint( this.sdk, this.path + 'PT_PROCDET' )
+		return new sdkv1endpoint( this.sdk, this.path + 'PT_PROCDET/' )
 	}
-
+	
 	caller() {
-		return new sdkv1endpoint( this.sdk, this.path + 'CALLER' )
+		return new sdkv1endpoint( this.sdk, this.path + 'CALLER/' )
 	}
-
+	
 	customer() {
-		return new sdkv1endpoint( this.sdk, this.path + 'CUSTOMER' )
+		return new sdkv1endpoint( this.sdk, this.path + 'CUSTOMER/' )
 	}
-
+	
 	dealers() {
-		return new sdkv1endpoint( this.sdk, this.path + 'DEALERS' )
+		return new sdkv1endpoint( this.sdk, this.path + 'DEALERS/' )
 	}
-
+	
 	dealr() {
-		return new sdkv1endpoint( this.sdk, this.path + 'OE_DEALR' )
+		return new sdkv1endpoint( this.sdk, this.path + 'OE_DEALR/' )
+	}
+	
+	condlib() {
+		return new sdkv1endpoint( this.sdk, this.path + 'PT_CONDLIB/' )
 	}
 
-	condlib() {
-		return new sdkv1endpoint( this.sdk, this.path + 'PT_CONDLIB' )
+	schema( table ) {
+		return new sdkv1endpoint( this.sdk, this.path + 'schema/' + table )
+	}
+
+	tpl () {
+		return new sdkv1endpoint( this.sdk, this.path + 'tpl/' )
+	}
+	
+	templates () {
+		return new sdkv1endpoint( this.sdk, this.path + 'templates' )
 	}
 }
 
@@ -445,47 +386,99 @@ class sdkv1endpoint {
 	}
 	
 	/**
-	 * @param {SearchArgsInterface} args
+	 * @param {SearchArgsInterface} params
 	 */
-	async search ( args ) {
-		const params = {}
-		if ( args.limit )
-			params.limit = args.limit
-		if ( args.offset )
-			params.offset = args.offset
-		if ( args.fields )
-			params.fields = args.fields.join ( ',' )
-		if ( args.filter )
-			params.filter = Object.entries( args.filter )
-			.map( ([k, v]) => { return `${k}=${v}` } ).join( ',' )
+	async search ( params = {} ) {
+		if ( params.limit )
+			params.limit = params.limit
+		if ( params.offset )
+			params.offset = params.offset
+		if ( params.fields )
+			params.fields = params.fields.join ( ',' )
+		if ( params.filter )
+			//params.filter = Object.entries( args.filter ).map( ([k, v]) => { return `${k}=${v}` } ).join( ',' )
+			params.filter = params.filter
+		if ( params.order )
+			params.order = params.order
 		
 		return await this.sdk.CRUD.read (
 			this.endpoint,
 			params
 		)
 	}
-
-	async create ( params ) 
-	{
-		return await this.sdk.CRUD.create ( 
+	
+	async insert ( data, params = null ) {
+		return await this.sdk.CRUD.create (
 			this.endpoint,
-			params
-		)
-	}
-
-	async update ( id, params )
-	{
-		return await this.sdk.CRUD.update (
-			this.endpoint,
-			params
+			params,
+			data,
 		)
 	}
 	
-	async delete ( id )
-	{
-		return await this.sdk.CRUD.delete ( 
-			this.endpoint,
-			{}
+	get = async ( item, args = {} ) => {
+		let endpoint = `${this.endpoint}${item}`
+		let params = {}
+		return await this.sdk.CRUD.read (
+			endpoint,
+			params,
 		)
+	}
+	
+	async replace ( item, data ) {
+		let endpoint = `${this.endpoint}${item}`
+		return await this.sdk.CRUD.replace (
+			endpoint,
+			null,
+			data,
+		)
+	}
+	
+	async update ( item, data, args = null ) {
+		let endpoint = `${this.endpoint}${item}`
+		return await this.sdk.CRUD.update (
+			endpoint,
+			args,
+			data,
+		)
+	}
+	
+	async delete ( item ) {
+		let endpoint = `${this.endpoint}${item}`
+		return await this.sdk.CRUD.delete (
+			endpoint,
+		)
+	}
+}
+
+class ordersendpoint extends sdkv1endpoint {
+	async alert ( order_num, body ) {
+		let url = `${this.endpoint}${order_num}/alert`
+		return await this.sdk.CRUD.create ( url, null, body )
+	}
+
+	async prioritize (  order_num, body ) {
+		let url = `${this.endpoint}${order_num}/prioritize`
+		return await this.sdk.CRUD.create ( url, null, body )
+	}
+
+	async undeliver (  order_num, body ) {
+		let url = `${this.endpoint}${order_num}/undeliver`
+		return await this.sdk.CRUD.create ( url, null, body )
+	}
+
+	async hold (  order_num, body ) {
+		let url = `${this.endpoint}${order_num}/hold`
+		return await this.sdk.CRUD.create ( url, null, body )
+	}
+
+	async deliver (  order_num, body ) {
+		let url = `${this.endpoint}${order_num}/deliver`
+		return await this.sdk.CRUD.create ( url, null, body )
+	}
+	
+	async comment ( order_num, body ) {
+		let url = `${this.endpoint}${order_num}/comment`
+		console.log(`comment: ${url}`)
+		return await this.sdk.CRUD.create ( url, null, body )
 	}
 }
