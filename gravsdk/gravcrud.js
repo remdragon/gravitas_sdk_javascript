@@ -1,18 +1,55 @@
-import { jstr } from "../staff/app/js/utils.js"
+import {
+	jstr,
+	jparse,
+	instance,
+	_d
+} from "../staff/app/js/utils.js"
 
-function query_stringify ( queryParams )
+export class RequestError extends $Error
 {
+	ignore_attrs = []
+	constructor( data, stack, ...params )
+	{
+		super(...params)
+		for( let attr in data ) {
+			if( this.ignore_attrs.includes( attr ) )
+				continue
+			this[attr] = data[attr]
+		}
+		if( data.name )
+			this.name = `${this.constructor.name}[${data.name}]`
+		
+		if( stack ) {
+			let stackarr = this.stack.split('\n')
+			stackarr.splice(1, this.stack.split('\n').length - 1, 'test')
+			this.stack = stackarr.join('\n') + '\n' + stack
+		}
+	}
+}
+
+function ParseRequestStack()
+{
+	let stack = []
+	try {
+		stack = (new Error()).stack.split('\n')
+	} catch ( e ) { }
+	let slicer = 4
+	if( stack.join('\n').search( /sdkv1endpoint|ordersendpoint|sdkv1cti/m)  != -1 ) // Subject for Improvement
+		slicer = 5
+	stack.splice( 0, slicer )
+	return stack.join('\n')
+}
+
+function query_stringify ( queryParams ) {
 	const _uri = encodeURIComponent
-	return Object.entries( queryParams ?? {} )
-		.map( ( [k, v] ) => `${_uri( k )}=${_uri( v )}` )
+	return Object.entries( queryParams || {} )
+		.map( ( [ k, v ] ) => `${ _uri( k ) }=${ _uri( v ) }` )
 		.join( '&' )
 }
 
-function url_from_endpoint_query ( endpoint, queryParams )
-{
-	var url = `/rest/${endpoint}`
-	if ( queryParams !== null && typeof queryParams !== 'undefined' )
-	{
+function url_from_endpoint_query ( endpoint, queryParams ) {
+	var url = `/rest/${ endpoint }`
+	if ( queryParams ) {
 		let q = query_stringify ( queryParams )
 		if ( q.length > 0 )
 			url += '?' + q
@@ -20,24 +57,50 @@ function url_from_endpoint_query ( endpoint, queryParams )
 	return url
 }
 
-class CRUD
-{
+function clean_endpoint_qargs ( endpoint, qargs={} ) {
+	// if endpoint has query string, put items in qargs instead
+	if ( instance( endpoint ) === 'string' && endpoint.includes( '?' ) ) {
+		var [endpoint, qstring] = endpoint.split('?')
+		const param = new URLSearchParams(qstring)
+		for ( const [k, v] of param.entries() )
+			(qargs || (qargs={}))[k] = v
+	}
+	return [ endpoint, qargs ]
+}
+
+function wsNoHandler ( refId, message, type='reply' ) {
+	Alert.errorCode({
+		title : 'Websocket Global Handler',
+		caption : `No defined callback for ${ type } with id='${ refId }'`,
+		message
+	})
+}
+
+function wsError ( caption, message ) {
+	console.error( message )
+	Alert.errorCode({
+		title : 'Websocket Error',
+		caption,
+		message
+	})
+}
+
+class CRUD {
 	/**
 	 * @param {String} endpoint
 	 * @param {Object} queryParams
 	 * @param {Object} body
 	 */
-	async create ( endpoint, queryParams, body )
-	{
-		return await this._request ( 'POST', endpoint, queryParams, body )
+	async create ( ...params ) {
+		return await this._request( 'POST', ...params )
 	}
 	
 	/**
 	 * @param {String} endpoint
 	 * @param {Object} queryParams
 	 */
-	async read ( endpoint, queryParams ) {
-		return await this._request ( 'GET', endpoint, queryParams )
+	async read ( ...params ) {
+		return await this._request( 'GET', ...params )
 	}
 	
 	/**
@@ -45,8 +108,8 @@ class CRUD
 	 * @param {Object} queryParams
 	 * @param {Object} body
 	 */
-	async update ( endpoint, queryParams, body ) {
-		return await this._request ( 'PATCH', endpoint, queryParams, body )
+	async update ( ...params ) {
+		return await this._request( 'PATCH', ...params )
 	}
 	
 	/**
@@ -54,8 +117,8 @@ class CRUD
 	 * @param {Object} queryParams
 	 * @param {Object} body
 	 */
-	async replace ( endpoint, queryParams, body ) {
-		return await this._request ( 'PUT', endpoint, queryParams, body )
+	async replace ( ...params ) {
+		return await this._request( 'PUT', ...params )
 	}
 	
 	/**
@@ -63,22 +126,20 @@ class CRUD
 	 * @param {Object} queryParams
 	 * @param {Object} body
 	 */
-	async delete ( endpoint, queryParams, body ) {
-		return await this._request ( 'DELETE', endpoint, queryParams, body )
+	async delete ( ...params ) {
+		return await this._request( 'DELETE', ...params )
 	}
 }
 
 export class HTTPCRUD extends CRUD
 {
-	
 	/**
 	 * @param {String} host
 	 * @param {Boolean} sslVerifyEnabled
 	 * @param {Boolean|undefined} testMode
 	 * 
 	 * */
-	constructor ( host, sslVerifyEnabled, testMode )
-	{
+	constructor ( host, sslVerifyEnabled, testMode ) {
 		super()
 		this.host = host
 		this.sslVerifyEnabled = sslVerifyEnabled
@@ -89,146 +150,93 @@ export class HTTPCRUD extends CRUD
 	 * 
 	 * @param {String} method get, post, delete, etc
 	 * @param {String} endpoint
-	 * @param {String} queryParams query string fields
+	 * @param {Object} queryArgs
 	 * @param {Object} body
 	 */
-	async _request ( method, endpoint, queryParams, body )
-	{
-		let url = `${this.host}${url_from_endpoint_query ( endpoint, queryParams )}`
+	 async _request ( method, endpoint, queryArgs, body ) {
+		[endpoint, queryArgs] = clean_endpoint_qargs( endpoint, queryArgs )
+		let _stack = ParseRequestStack()
 		
-		var params = {
-			method: method,
-			headers: { 'Content-Type': 'application/json' },
-		}
-		switch ( method )
-		{
-			case 'GET':
-				break
-			
-			case 'POST':
-			case 'PATCH':
-			case 'DELETE':
-				params.body = JSON.stringify ( body )
-				break
-			
-			default:
-				console.assert ( false, `invalid method='${method}'` )
+		const url = `${ this.host }${ url_from_endpoint_query( endpoint, queryArgs ) }`
+		const payload = {
+			method : method,
+			headers : { 'Content-Type' : 'application/json' },
+			body : method !== 'GET' ? jstr( body ) : undefined
 		}
 		
-		const response = await fetch ( url, params )
-		try
-		{
-			var body = await response.clone().json()
-		}
-		catch
-		{
-			var text = await response.text()
-
+		const response = await fetch ( url, payload )
+		try { var data = await response.clone().json() }
+		catch {
+			var data = await response.text()
 			// return response text if url is a template url
-			if ( /\/tpl\//g.test ( url ) ) return text
-			
+			if ( /\/tpl\//g.test ( url ) ) return data
 			// otherwise throw response text as error
-			throw new Error ( `Error decoding json: ${text}` )
+			throw new Error ( `Error decoding json: ${ jstr( data ) }` )
 		}
 		
-		if ( !body.success ) {
+		if ( !data.success && !queryArgs?.raw ) {
 			const { status, statusText } = response
-			throw new Error (
-				`${statusText} (${status}): ${body.error || jstr( body )}`
-			)
+			data.name = `HTTP-${ status }`
+			throw new RequestError ( data, _stack, data.error || jstr( data ) )
 		}
 
-		return body
-	}
-	
-	
-	async connect()
-	{
-		// This function does nothing...
-		// Just to make the HTTPCRUD class similar to WSSCRUD
+		return data
 	}
 }
 
-export class WSSCRUD extends CRUD
-{
-	static eventcallbacks = { 'all-event':(e,r) => {} }
-	static replycallbacks = {}
-	
-	on_events = (e,r) => {}
-
-	constructor ( url )
-	{
+export class WSSCRUD extends CRUD {
+	constructor ( url ) {
 		super()
 		this.url = url
-		this.socketEvent = null
+		this.eventcallbacks = {}
+		this.replycallbacks = {}
 	}
 	
-	generateId() {
-		return uid.uid(16)
-	}
-
+	on_events () {} // user can override, called on every event
+	generateId () { return uid.uid(16) }
+	
 	status () {
 		switch ( this.wss?.readyState ) {
-			case 0: return 'CONNECTING'
-			case 1: return 'OPEN'
-			case 2: return 'CLOSING'
-			case 3: return 'CLOSED'
-			default: return 'UNKNOWN'
+			case 0 : return 'CONNECTING'
+			case 1 : return 'OPEN'
+			case 2 : return 'CLOSING'
+			case 3 : return 'CLOSED'
+			default : return 'UNKNOWN'
 		}
 	}
 	
-	async connect() {
-		
+	connect () {
+		const self = this
 		return new Promise( ( resolve, reject ) => {
 			// don't recreate stuffs if ws is still open
-			if ( this.status() === 'OPEN' ) {
-				console.log('still opened!')
-				return resolve( this.socketEvent )
-			}
-
-			this.wss = new WebSocket ( this.url )
+			if ( self.status() === 'OPEN' )
+				return resolve( self.wss )
 			
-			this.wss.onopen = ( event ) => {
-				this.socketEvent = event
-				resolve( this.socketEvent )
+			// initiate new ws connection
+			self.wss = new WebSocket ( self.url )
+			self.wss.onopen = () => {
+				// onopen callback has been called
+				// but we have to wait for ws to be in full OPEN state
+				const t = setInterval(() => {
+					if (self.status() === 'OPEN') {
+						clearInterval(t)
+						return resolve(self.wss)
+					}
+				}, 10)
 			}
-			
-			this.wss.onerror = ( event ) => {
-				this.socketEvent = event
-				reject( this.socketEvent )
-			}
-			
-			this.wss.onmessage = ( event ) => {
-				try { var data = JSON.parse ( event.data ) }
-				catch ( e ) {
-					console.error(`[wss.onmessage.json-parse] ${e.message}, data='${event.data}'`)
-					throw new Error ( `JSON Parse error from WebSocket: ${e.message}` )
-				}
+			self.wss.onerror = () => _d(() => reject( `WebSocket connection to '${self.url}' failed` ), 100)
+			self.wss.onmessage = ( event ) => {
+				const data = jparse( event.data )
+				if ( !data ) return
 				
-				try {
-					// parse for events
-					if ( data.event ) {
-						// console.log(`[wss.onmessage.event] `, data)
-
-						if ( !WSSCRUD.eventcallbacks[data.event] )
-							throw new Error( `No event callback defined for event '${data.event}'` )
-
-						WSSCRUD.eventcallbacks[data.event](data)
-						this.on_events( data.event, data )
-					}
-					// parse for replies
-					else {
-						// console.log(`[wss.onmessage.reply] `, data)
-
-						if ( !WSSCRUD.replycallbacks[data.id] )
-							throw new Error( `No reply callback defined for reply '${data.id}'` )
-
-						const f = data.success ? 'resolve' : 'reject'
-						WSSCRUD.replycallbacks[data.id][f]( data )
-					}
-				} catch ( e ) {
-					console.error(`[wss.onmessage] ${e.message}`)
-					throw e
+				if ( data.event ) { // parse for events
+					self.eventcallbacks[data.event]?.call( self, data )
+					self.on_events?.call( self, data.event, data )
+				} else { // parse for replies
+					const k = data.success ? 'resolve' : 'reject'
+					const q = (self.replycallbacks[data.id] || {})[k]
+					if (!q) wsNoHandler(data.id, jstr(data))
+					q?.call(self, data)
 				}
 			}
 		} )
@@ -236,24 +244,24 @@ export class WSSCRUD extends CRUD
 
 	// register callback to an event
 	on ( event, callback ) {
-		if ( typeof callback !== 'function' )
-			throw new Error( `Invalid type of callback specified: ${typeof callback}` )
-
-		WSSCRUD.eventcallbacks[event] = callback
+		if ( instance( callback ) !== 'function' )
+			throw new Error( `Invalid type of callback specified: ${ typeof callback }` )
+		
+		this.eventcallbacks[ event ] = callback
 	}
 
 	// remove registered callback for event
 	off ( event ) {
-		delete WSSCRUD.eventcallbacks[event]
+		delete this.eventcallbacks[ event ]
 	}
 
 	// notifies server that we want to subscribe to event broadcast
 	async subscribe ( event, callback ) {
 		try {
 			this.on( event, callback )
-			await this.read(`${event}/subscribe`)
+			await this.read(`${ event }/subscribe`)
 		} catch ( e ) {
-			console.error( `[event.subscribe --> '${event}'] ${e.message || e.error}` )
+			console.error( `[event.subscribe --> '${ event }'] ${ e.message || e.error }` )
 			throw e
 		}
 	}
@@ -262,77 +270,82 @@ export class WSSCRUD extends CRUD
 	async unsubscribe ( event ) {
 		try {
 			this.off( event )
-			await this.read(`${event}/unsubscribe`)
+			await this.read(`${ event }/unsubscribe`)
 		} catch ( e ) {
-			console.error( `[event.unsubscribe --> '${event}'] ${e.message || e.error}` )
+			console.error( `[event.unsubscribe --> '${ event }'] ${ e.message || e.error }` )
 			throw e
 		}
 	}
 	
-	AddEventCallback( type, functions )
-	{
-		if( !WSSCRUD.eventcallbacks[type] ) {
-			WSSCRUD.eventcallbacks[type] = functions
+	// Todo Fixme: Legacy stuff
+	AddEventCallback( type, functions ) {
+		if ( !this.eventcallbacks[ type ] ) {
+			this.eventcallbacks[ type ] = functions
 		} else {
-			if( typeof(functions) == 'object' )
-				WSSCRUD.eventcallbacks[type] = WSSCRUD.eventcallbacks[type].concat( functions )
+			if ( typeof( functions ) == 'object' )
+				this.eventcallbacks[ type ] = this.eventcallbacks[ type ].concat( functions )
 			else
-				WSSCRUD.eventcallbacks[type].append( functions )
+				this.eventcallbacks[ type ].append( functions )
 		}
 		
-		return WSSCRUD.eventcallbacks[type]
+		return this.eventcallbacks[ type ]
 	}
 	
-	RemoveEventCallback( type )
-	{
-		delete WSSCRUD.eventcallbacks[type]
+	// Todo Fixme: Legacy stuff
+	RemoveEventCallback( type ) {
+		delete this.eventcallbacks[ type ]
 	}
 	
 	/**
 	 * 
 	 * @param {String} method get, post, delete, etc
 	 * @param {String} endpoint
-	 * @param {String} queryParams query string fields
+	 * @param {Object} queryArgs
 	 * @param {Object} body
 	 */
-	async _request ( method, endpoint, queryParams, body )
-	{
-		let url = url_from_endpoint_query ( endpoint, null )
-		return new Promise ( ( resolve, reject ) => {
-			
-			let request = {
-				id: this.generateId(),
-				method: method,
-				path: url,
-				args: query_stringify ( queryParams ),
+	_request ( method, endpoint, queryArgs, body ) {
+		[endpoint, queryArgs] = clean_endpoint_qargs( endpoint, queryArgs )
+		let _stack = ParseRequestStack()
+		
+		if ( instance(queryArgs) === 'object' ) {
+			Object.entries(queryArgs)
+				.map(([a,b]) => {
+					if ( instance(b) === 'boolean' ) return
+					queryArgs[a]=`${b}`
+				})
+			if ( !Object.keys( queryArgs ).length )
+				queryArgs = null
+		}
+				  
+		return new Promise ( async ( resolve, reject ) => {
+			const _resolve = resolve
+			const _reject = reject
+			const request = {
+				id : this.generateId(),
+				method : method,
+				path : `/rest/${endpoint}`,
+				args : queryArgs ?? undefined,
+				body : method !== 'GET' ? body : undefined
 			}
 			
-			switch ( method )
-			{
-				case 'GET':
-					break
-				
-				case 'POST':
-				case 'PATCH':
-				case 'DELETE':
-					request.body = body
-					break
-				
-				default:
-					console.assert ( false, `invalid method='${method}'` )
-			}
-
-			WSSCRUD.replycallbacks[request.id] = { resolve, reject }
-
-			try { this.wss.send ( JSON.stringify( request ) + '\n' ) }
-			catch ( e ) {
-				console.error(
-					`[WSSCRUD._request] 'this.wss.send' has failed: ${e.message}. ` +
-					"Don't forget to call WSSCRUD.connect() first."
-				)
-				throw e
+			this.replycallbacks[ request.id ] = {
+				resolve: function ( data ) {
+					if ( data?.args?.raw )
+						return _resolve( data?.rows[0] )
+					return resolve( data )
+				},
+				reject : function ( data ) {
+					data.name = `WS-${ data.status }`
+					return _reject( new RequestError( data, _stack, data.error ) )
+				}
 			}
 			
+			try {
+				await this.connect()
+				this.wss.send ( `${ jstr( request ) }\n` )
+			} catch ( e ) {
+				wsError( 'Websocket send has failed', e.message || jstr( e ) )
+			}
 		} )
 	}
 }
