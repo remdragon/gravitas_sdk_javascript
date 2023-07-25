@@ -4,30 +4,9 @@ import {
 	instance,
 	_d
 } from "../staff/app/js/utils.js"
+import { RequestError } from '/js/Errors.js'
 
-export class RequestError extends $Error
-{
-	ignore_attrs = []
-	constructor( data, stack, ...params )
-	{
-		super(...params)
-		for( let attr in data ) {
-			if( this.ignore_attrs.includes( attr ) )
-				continue
-			this[attr] = data[attr]
-		}
-		if( data.name )
-			this.name = `${this.constructor.name}[${data.name}]`
-		
-		if( stack ) {
-			let stackarr = this.stack.split('\n')
-			stackarr.splice(1, this.stack.split('\n').length - 1, 'test')
-			this.stack = stackarr.join('\n') + '\n' + stack
-		}
-	}
-}
-
-function ParseRequestStack()
+export function ParseRequestStack()
 {
 	let stack = []
 	try {
@@ -40,15 +19,15 @@ function ParseRequestStack()
 	return stack.join('\n')
 }
 
-function query_stringify ( queryParams ) {
+export function query_stringify ( queryParams ) {
 	const _uri = encodeURIComponent
 	return Object.entries( queryParams || {} )
 		.map( ( [ k, v ] ) => `${ _uri( k ) }=${ _uri( v ) }` )
 		.join( '&' )
 }
 
-function url_from_endpoint_query ( endpoint, queryParams ) {
-	var url = `/rest/${ endpoint }`
+export function url_from_endpoint_query ( endpoint, queryParams, overrideEP = false ) {
+	var url = overrideEP?endpoint:`/rest/${ endpoint }`
 	if ( queryParams ) {
 		let q = query_stringify ( queryParams )
 		if ( q.length > 0 )
@@ -57,7 +36,7 @@ function url_from_endpoint_query ( endpoint, queryParams ) {
 	return url
 }
 
-function clean_endpoint_qargs ( endpoint, qargs={} ) {
+export function clean_endpoint_qargs ( endpoint, qargs={} ) {
 	// if endpoint has query string, put items in qargs instead
 	if ( instance( endpoint ) === 'string' && endpoint.includes( '?' ) ) {
 		var [endpoint, qstring] = endpoint.split('?')
@@ -68,7 +47,7 @@ function clean_endpoint_qargs ( endpoint, qargs={} ) {
 	return [ endpoint, qargs ]
 }
 
-function wsNoHandler ( refId, message, type='reply' ) {
+export function wsNoHandler ( refId, message, type='reply' ) {
 	Alert.errorCode({
 		title : 'Websocket Global Handler',
 		caption : `No defined callback for ${ type } with id='${ refId }'`,
@@ -76,16 +55,19 @@ function wsNoHandler ( refId, message, type='reply' ) {
 	})
 }
 
-function wsError ( caption, message ) {
+export function wsError ( caption, message ) {
 	console.error( message )
 	Alert.errorCode({
 		title : 'Websocket Error',
 		caption,
 		message
 	})
+	if( $loading )
+		$loading.hide()
 }
 
 class CRUD {
+	presetCookies = null
 	/**
 	 * @param {String} endpoint
 	 * @param {Object} queryParams
@@ -152,21 +134,28 @@ export class HTTPCRUD extends CRUD
 	 * @param {String} endpoint
 	 * @param {Object} queryArgs
 	 * @param {Object} body
+	 * @param {Boolean} overrideEP
 	 */
-	 async _request ( method, endpoint, queryArgs, body ) {
+	 async _request ( method, endpoint, queryArgs, body, overrideEP = false ) {
 		[endpoint, queryArgs] = clean_endpoint_qargs( endpoint, queryArgs )
 		let _stack = ParseRequestStack()
 		
-		const url = `${ this.host }${ url_from_endpoint_query( endpoint, queryArgs ) }`
+		const url = `${ this.host }${ url_from_endpoint_query( endpoint, queryArgs, overrideEP ) }`
+		const headers = new Headers()
+		!!this.presetCookies && headers.set( 'Cookie', this.presetCookies )
+		headers.set( 'Content-Type', "application/json" )
 		const payload = {
+			headers,
 			method : method,
-			headers : { 'Content-Type' : 'application/json' },
 			body : method !== 'GET' ? jstr( body ) : undefined
 		}
 		
 		const response = await fetch ( url, payload )
-		try { var data = await response.clone().json() }
-		catch {
+		try {
+			var data = await response.clone().json()
+			if( typeof data == 'object' ) 
+				data.headers = response.headers
+		} catch {
 			var data = await response.text()
 			// return response text if url is a template url
 			if ( /\/tpl\//g.test ( url ) ) return data
@@ -177,6 +166,7 @@ export class HTTPCRUD extends CRUD
 		if ( !data.success && !queryArgs?.raw ) {
 			const { status, statusText } = response
 			data.name = `HTTP-${ status }`
+			_stack = `    at ${ url }\n`+ _stack
 			throw new RequestError ( data, _stack, data.error || jstr( data ) )
 		}
 
@@ -302,10 +292,12 @@ export class WSSCRUD extends CRUD {
 	 * @param {String} endpoint
 	 * @param {Object} queryArgs
 	 * @param {Object} body
+	 * @param {Boolean} overrideEP
 	 */
-	_request ( method, endpoint, queryArgs, body ) {
+	_request ( method, endpoint, queryArgs, body, overrideEP = false ) {
 		[endpoint, queryArgs] = clean_endpoint_qargs( endpoint, queryArgs )
-		let _stack = ParseRequestStack()
+		let _stack = ParseRequestStack(),
+		self = this
 		
 		if ( instance(queryArgs) === 'object' ) {
 			Object.entries(queryArgs)
@@ -316,14 +308,14 @@ export class WSSCRUD extends CRUD {
 			if ( !Object.keys( queryArgs ).length )
 				queryArgs = null
 		}
-				  
+		
 		return new Promise ( async ( resolve, reject ) => {
 			const _resolve = resolve
 			const _reject = reject
 			const request = {
 				id : this.generateId(),
 				method : method,
-				path : `/rest/${endpoint}`,
+				path : overrideEP? endpoint:`/rest/${endpoint}`,
 				args : queryArgs ?? undefined,
 				body : method !== 'GET' ? body : undefined
 			}
@@ -336,6 +328,8 @@ export class WSSCRUD extends CRUD {
 				},
 				reject : function ( data ) {
 					data.name = `WS-${ data.status }`
+					const url = `${ self.url.replace('/ws', '').replace('wss://', 'https://') }${ url_from_endpoint_query( endpoint, queryArgs, overrideEP ) }`
+					_stack = `    at ${ url }\n`+ _stack
 					return _reject( new RequestError( data, _stack, data.error ) )
 				}
 			}

@@ -1,5 +1,6 @@
 'use strict'
-import { HTTPCRUD, WSSCRUD, RequestError } from './gravcrud.js'
+import { HTTPCRUD, WSSCRUD } from './gravcrud.js'
+import { $Error } from './Errors.js'
 
 class GravError extends $Error {
 	constructor ( responseText ) {
@@ -14,8 +15,11 @@ class GravAuthError extends GravError {
 }
 
 class SdkAuth {
-	constructor ( sslVerifyEnabled ) {
-		this.CRUD = new HTTPCRUD ( `https://${ location.host }`, sslVerifyEnabled )
+	constructor ( URLObj, kwargs = {} ) {
+		const { sslVerifyEnabled = true, cookieCallback = () => {} } = kwargs
+		this.CRUD = new HTTPCRUD ( `https://${URLObj.host}`, sslVerifyEnabled )
+
+		this.cookieCallback = cookieCallback
 	}
 	
 	/**
@@ -74,7 +78,7 @@ class SdkAuth {
 		
 		if ( type )
 			payload.TYPE = type
-
+		
 		const responseData = await this.CRUD.create (
 			'login/',
 			null,
@@ -83,6 +87,8 @@ class SdkAuth {
 		
 		if ( !responseData )
 			throw new GravAuthError ( responseData[ 'error' ] )
+		
+		this.cookieCallback( responseData )
 		
 		// TODO FIXME: deal with other scenarios
 		return responseData
@@ -95,22 +101,46 @@ class SdkAuth {
 		)
 		return this._login_sanity_check( true, result )
 	}
+	/**
+	 * 
+	 * @param {*} email 
+	 * @param {*} contact_number 
+	 * @param {*} type employee | client
+	 * @returns 
+	 */
+	async request_password_reset ( type, payload ) {
+		const reqPayload = {
+			TYPE: type,
+			...payload
+		}
+
+		const responseData = await this.CRUD.create (
+			'login/request-password-reset',
+			null,
+			reqPayload,
+		)
+		
+		if ( !responseData )
+			throw new GravAuthError ( responseData[ 'error' ] )
+
+		return responseData
+	}
 }
 
 export class sdkv1 {
-	constructor( host, sslVerifyEnabled ) {
-
+	constructor( host, kwargs = {} ) {
+		const { sslVerifyEnabled = true, allowCachedCookies = false } = kwargs
+		
 		if( !host )
 			return
 		
 		this.url = new URL ( host )
 		
-		if ( typeof sslVerifyEnabled === 'undefined' )
-			sslVerifyEnabled = true
-		
 		this.sslVerifyEnabled = sslVerifyEnabled
 		this.protocol = this.url.protocol
-		this.auth = new SdkAuth( sslVerifyEnabled )
+		const authConfig = { sslVerifyEnabled }
+		allowCachedCookies && ( authConfig.cookieCallback = this.cookiePreSet.bind(this) )
+		this.auth = new SdkAuth( this.url, authConfig )
 		
 		if ( this.protocol == 'https:' ) {
 			this.CRUD = new HTTPCRUD ( host, this.sslVerifyEnabled, )
@@ -121,6 +151,13 @@ export class sdkv1 {
 		else {
 			throw new GravError ( 'invalid protocol specified, must be `https` or `wss`' )
 		}
+		this.CRUD.allowCachedCookies = allowCachedCookies
+	}
+	
+	cookiePreSet( loginResponse )
+	{
+		const cookie = loginResponse.headers.get('set-cookie')
+		this.CRUD.presetCookies = cookie
 	}
 	
 	async connect()
@@ -131,7 +168,7 @@ export class sdkv1 {
 	client ( id ) {
 		return new sdkv1client ( this, id )
 	}
-
+	
 	cti()
 	{
 		return new sdkv1cti( this )
@@ -151,12 +188,24 @@ export class sdkv1 {
 		return this.CRUD.read ( uri, params )
 	}
 	
+	account_keywords() {
+		return new sdkv1endpoint( this, 'keywords/' )
+	}
+	
+	advanced_delivery() {
+		return new sdkv1endpoint( this, 'OE_SCHED/' )
+	}
+	
 	acd() { 
 		return new sdkv1endpoint( this, 'PT_ACD/' )
 	}
 	
 	alpha() { 
 		return new sdkv1endpoint( this, 'GVALPHAS/' )
+	}
+
+	alter ( table ) {
+		return new sdkv1endpoint( this, 'alter/' + table )
 	}
 
 	billing( event ) {
@@ -183,6 +232,10 @@ export class sdkv1 {
 		return new sdkv1endpoint( this, 'DISP_CONF/' )
 	}
 	
+	dispatch_jobs() {
+		return new sdkv1endpoint( this, 'dispatch/jobs/' )
+	}
+	
 	employees() {
 		return new sdkv1endpoint( this, 'employees/')
 	}
@@ -193,14 +246,6 @@ export class sdkv1 {
 
 	icall() {
 		return new sdkv1endpoint( this, 'PT_ICALL/' )
-	}
-	
-	dispatch_jobs() {
-		return new sdkv1endpoint( this, 'dispatch/jobs/' )
-	}
-	
-	account_keywords() {
-		return new sdkv1endpoint( this, 'keywords/' )
 	}
 	
 	keywords() {
@@ -219,40 +264,41 @@ export class sdkv1 {
 		return new sdkv1endpoint ( this, `message-check/${table}/` )
 	}
 	
+	mlcolor() {
+		return new sdkv1endpoint ( this, 'PT_MLCOL/' )
+	}
+
+	multirest ( data, params = null ) {
+		return this.CRUD.create (
+			'/multirest/',
+			params,
+			data,
+			true
+		)
+	}
+
+	msgformats() {
+		return new sdkv1endpoint( this, 'MSGFORMATS/' )
+	}
+	
 	park() {
 		return new sdkv1endpoint( this, 'PT_PARK/' )
 	}
 	
+	parkwhy() {
+		return new sdkv1endpoint( this, 'PARKWHY/' )
+	}
+
+	parklogs() {
+		return new sdkv1endpoint( this, 'PARKLOG/' )
+	}
+
+	prcolors() {
+		return new sdkv1endpoint( this, 'PRCOLORS/' )
+	}
+	
 	priority() {
 		return new sdkv1endpoint( this, 'PRIORITY/' )
-	}
-
-	queue() { 
-		return new sdkv1endpoint( this, 'PT_QUEUE/' )
-	}
-
-	reminders() {
-		return new sdkv1endpoint( this, 'PTREMIND/' )
-	}
-	
-	advanced_delivery() {
-		return new sdkv1endpoint( this, 'OE_SCHED/' )
-	}
-	
-	simple_delivery() {
-		return new sdkv1endpoint( this, 'PT_SCHED/' )
-	}
-
-	schema ( table ) {
-		return new sdkv1endpoint( this, 'schema/' + table )
-	}
-	
-	skill() {
-		return new sdkv1endpoint( this, 'GV_SKILLS/')
-	}
-	
-	status() {
-		return new sdkv1endpoint( this, 'PTSTATUS/' )
 	}
 
 	pt_main() {
@@ -263,28 +309,72 @@ export class sdkv1 {
 		return new sdkv1endpoint( this, 'PT_TYPE/' )
 	}
 
-	prcolors() {
-		return new sdkv1endpoint( this, 'PRCOLORS/' )
+	reminders() {
+		return new sdkv1endpoint( this, 'PTREMIND/' )
 	}
 	
 	reports() {
 		return new sdkv1endpoint( this, `REPORTDATA/` )
 	}
 	
+	reporting() {
+		return new sdkv1endpoint( this, 'reporting/' )
+	}
+	
+	schedulers() {
+		return new sdkv1endpoint( this, 'SCHEDULER/' )
+	}
+	
+	job_schedules() {
+		return new sdkv1endpoint( this, 'JOBSCHED/' )
+	}
+	
+	job_actions() {
+		return new sdkv1endpoint( this, 'JOBACTION/' )
+	}
+	
+	action_report() {
+		return new sdkv1endpoint( this, 'ACTIONRPRT/' )
+	}
+	
 	report_builder() {
 		return new sdkv1endpoint( this, 'report-builder/' )
+	}
+
+	queue() { 
+		return new sdkv1endpoint( this, 'PT_QUEUE/' )
+	}
+	
+	simple_delivery() {
+		return new sdkv1endpoint( this, 'PT_SCHED/' )
+	}
+
+	schema ( table ) {
+		return new sdkv1endpoint( this, 'schema/' + table )
+	}
+	
+	schema_portal ( table ) {
+		return new sdkv1endpoint( this, 'portal/schema/' + table )
+	}
+	
+	skill() {
+		return new sdkv1endpoint( this, 'GV_SKILLS/')
+	}
+	
+	status() {
+		return new sdkv1endpoint( this, 'PTSTATUS/' )
 	}
 	
 	system_dials() {
 		return new sdkv1endpoint( this, `PT_XFER/` )
 	}
 	
-	timed_actions() {
-		return new sdkv1endpoint( this, 'PT_TACTION/' )
-	}
-	
 	task_hist() {
 		return new sdkv1endpoint( this, 'TASK_HIST/' )
+	}
+	
+	timed_actions() {
+		return new sdkv1endpoint( this, 'PT_TACTION/' )
 	}
 
 	timezone() {
@@ -318,6 +408,10 @@ export class sdkv1client {
 	
 	abend() {
 		return new sdkv1endpoint( this.sdk, this.path + 'OE_ABEND/' )
+	}
+
+	alter ( table ) {
+		return new sdkv1endpoint( this.sdk, this.path + 'alter/' + table )
 	}
 	
 	answer_phrase() {
@@ -364,8 +458,20 @@ export class sdkv1client {
 		return new sdkv1endpoint ( this.sdk, this.path + `CONTACT_FORMS/${ type }` )
 	}
 	
+	miniform( formname ) {
+		return new sdkv1endpoint( this.sdk, this.path + `${formname}/` )
+	}
+	
 	contacts() {
 		return new sdkv1endpoint( this.sdk, this.path + 'PT_CONTC/' )
+	}
+	
+	contact( name ){
+		return new sdkv1contact( this.sdk, `${this.path}PT_CONTC/${name}/` )
+	}
+	
+	oncall_names() {
+		return new sdkv1endpoint( this.sdk, this.path + 'oncall-names' )
 	}
 	
 	copy_to() {
@@ -374,6 +480,10 @@ export class sdkv1client {
 		
 	customer() {
 		return new sdkv1endpoint( this.sdk, this.path + 'CUSTOMER/' )
+	}
+	
+	customer_service() {
+		return new sdkv1endpoint( this.sdk, this.path + 'CUST_SVC/' )
 	}
 	
 	custindex() {
@@ -452,10 +562,6 @@ export class sdkv1client {
 		return new ordersendpoint( this.sdk, this.path + 'ORDERS/' )
 	}
 	
-	orders_newnumber() {
-		return new ordersendpoint( this.sdk, this.path + 'ORDERS/NEW_NUMBER/' )
-	}
-	
 	oncall() {
 		return new sdkv1endpoint( this.sdk, this.path + 'PTONCALL/' )
 	}
@@ -464,8 +570,12 @@ export class sdkv1client {
 		return new sdkv1endpoint( this.sdk, this.path + `${ tablename }/` )
 	}
 	
+	parkwhy() {
+		return new sdkv1endpoint( this.sdk, this.path + 'PARKWHY/' )
+	}
+	
 	picklist() {
-		return new sdkv1endpoint( this.sdk, this.path + 'OE_PKLST/' )
+		return new sdkv1endpoint( this.sdk, this.path + 'picklist/' )
 	}
 	
 	pl ( tbl ) {
@@ -475,7 +585,15 @@ export class sdkv1client {
 	pt_locate() {
 		return new sdkv1endpoint( this.sdk, this.path + 'PT_LOCAT/' )
 	}
-
+	
+	pages() {
+		return new sdkv1endpoint( this.sdk, this.path + 'PAGES/' )
+	}
+	
+	msgs() {
+		return new sdkv1endpoint( this.sdk, this.path + 'MSGS/' )
+	}
+	
 	redeliver() {
 		return new sdkv1endpoint( this.sdk, this.path + 'REDELIVER/' )
 	}
@@ -533,6 +651,17 @@ export class sdkv1client {
 	}
 }
 
+export class sdkv1contact {
+	constructor( sdk, path ) {
+		this.sdk = sdk
+		this.path = path
+	}
+	
+	async send( data ) {
+		return await this.sdk.CRUD.create( `${this.path}send`, null, data )
+	}
+}
+
 export class sdkv1cti {
 	/**
 	 * @param {sdkv1} sdk
@@ -546,30 +675,28 @@ export class sdkv1cti {
 	{
 		return await this.sdk.CRUD.create ( 'cti/' )
 	}
-
+	
 	async disconnect()
 	{
 		return await this.sdk.CRUD.delete ( 'cti/' )
 	}
-
-	call_actions( action )
+	
+	get actions()
 	{
-		action = ( action + '' ).toLowerCase()
-		return new sdkv1endpoint( this.sdk, this.path + `talk_call/${action}` )
+		return new ctiactionendpoint( this.sdk, this.path )
 	}
-
+	
 	callparks() 
 	{
 		return new sdkv1endpoint( this.sdk, this.path + 'callparks/' )
 	}
-
+	
 	async status ( status, state = null ) {
 		let param = { 'status': status }
 		if( state )
 			param.state = state
 		return await this.sdk.CRUD.create ( this.path + 'status/', null, param)
 	}
-
 }
 
 // This is a way to have typed optional args in JS.
@@ -626,7 +753,7 @@ export class sdkv1endpoint {
 		let endpoint = `${ this.endpoint }?limit=${ params.limit }&find=${ params.value }`
 		return await this.sdk.CRUD.read ( endpoint )
 	}
-
+	
 	async count( params ) {
 		let endpoint = `${ this.endpoint }count`
 		return await this.sdk.CRUD.read (
@@ -668,9 +795,9 @@ export class sdkv1endpoint {
 			data,
 		)
 	}
-
+	
 	async updateq ( item, data, args = null ) {
-		let endpoint = `${ this.endpoint }?item=${ item }`
+		let endpoint = `${ this.endpoint }?item=${ encodeURIComponent( item ) }`
 		return await this.sdk.CRUD.update (
 			endpoint,
 			args,
@@ -684,12 +811,60 @@ export class sdkv1endpoint {
 			endpoint,
 		)
 	}
-
+	
 	async deleteq ( item ) {
-		let endpoint = `${ this.endpoint }?item=${ item }`
+		let endpoint = `${ this.endpoint }?item=${ encodeURIComponent( item ) }`
 		return await this.sdk.CRUD.delete (
 			endpoint,
 		)
+	}
+	
+	toString()
+	{
+		return new stringyfiedendpoint( this.sdk, this.endpoint )
+	}
+}
+
+export class ctiactionendpoint extends sdkv1endpoint
+{
+	async answer( client_id )
+	{
+		return await this.sdk.CRUD.create ( `${ this.endpoint }talk_call/answer`, null, { client_id, CLIENT_ID: client_id } )
+	}
+	
+	async blindtransfer( dial_digits, order_num = 1000000001 )
+	{
+		return await this.sdk.CRUD.create ( `${ this.endpoint }blindtransfer`, null, { dial_digits, order_num } )
+	}
+	
+	async dialout( client_id, dial_digits, order_num = 1000000001, location = '' )
+	{
+		return await this.sdk.CRUD.create ( `${ this.endpoint }dialout`, null, { acct: client_id, dial_digits, order_num, location } )
+	}
+	
+	async hangup( client_id )
+	{
+		return await this.sdk.CRUD.create ( `${ this.endpoint }talk_call/hangup`, null, { client_id } )
+	} 	
+	
+	async hold( client_id )
+	{
+		return await this.sdk.CRUD.create ( `${ this.endpoint }talk_call/hold`, null, { client_id } )
+	}
+	
+	async park( client_id, order_num, comment, park_to, reason )
+	{
+		return await this.sdk.CRUD.create ( `${ this.endpoint }talk_call/park`, null, { client_id, order_num, comment, park_to, reason } )
+	}
+	
+	async unhold( client_id )
+	{
+		return await this.sdk.CRUD.create ( `${ this.endpoint }talk_call/unhold`, null, { client_id } )
+	}
+	
+	async unpark( client_id , uuid )
+	{
+		return await this.sdk.CRUD.create ( `${ this.endpoint }talk_call/unpark`, null, { client_id, uuid } )
 	}
 }
 
@@ -722,5 +897,70 @@ export class ordersendpoint extends sdkv1endpoint {
 	async comment ( order_num, body ) {
 		let url = `${ this.endpoint }${ order_num }/comment`
 		return await this.sdk.CRUD.create ( url, null, body )
+	}
+
+	async IFFOR () {
+		let url = `${ this.endpoint }/IFFOR`
+		return await this.sdk.CRUD.read ( url, null )
+	}
+
+	async new_ordernum () {
+		let url = `${ this.endpoint }NEW_NUMBER/`
+		return await this.sdk.CRUD.read ( url, null )
+	}
+}
+
+export class stringyfiedendpoint extends sdkv1endpoint
+{
+	paramToString( params ) {
+		let _params = new URLSearchParams( params ).toString()
+		if( _params ) _params = `?${_params}`
+		
+		return _params
+	}
+	/**
+	 * @param {SearchArgsInterface} params
+	 */
+	search ( params = {} ) {
+		if ( params.fields )
+			params.fields = params.fields.join ( ',' )
+		
+		return `${this.endpoint}${this.paramToString(params)}`
+	}
+	
+	find ( params = { limit : 100, find: '' } ) {
+		return `${ this.endpoint }${this.paramToString(params)}`
+	}
+	
+	count( params = {} ) { 
+		return `${ this.endpoint }count${this.paramToString(params)}`
+	}
+	
+	insert ( params = null ) {
+		return `${this.endpoint}${this.paramToString(params)}`
+	}
+	
+	get ( item, params = {} ) {
+		return `${ this.endpoint }${ item }${this.paramToString(params)}`
+	}
+	
+	replace ( item ) {
+		return `${ this.endpoint }${ item }`
+	}
+	
+	update ( item, params = {} ) {
+		return `${ this.endpoint }${ item }${this.paramToString(params)}`
+	}
+	
+	updateq ( item, params = {} ) {
+		return `${ this.endpoint }?item=${ encodeURIComponent( item ) }${this.paramToString(params)}`
+	}
+	
+	delete ( item ) {
+		return `${ this.endpoint }${ item }`
+	}
+	
+	deleteq ( item ) {
+		return `${ this.endpoint }?item=${ encodeURIComponent( item ) }`
 	}
 }
